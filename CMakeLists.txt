@@ -41,7 +41,7 @@ option( LIBAKRYPT_TLS_13 "Build library with TLS 1.3 protocol support" OFF )
 option( LIBAKRYPT_AKRYPT "Build console akrypt application" OFF )
 
 # -------------------------------------------------------------------------------------------------- #
-set( CMAKE_BUILD_TYPE Debug )
+set( CMAKE_BUILD_TYPE Release )
 
 # -------------------------------------------------------------------------------------------------- #
 if( LIBAKRYPT_FIOT )
