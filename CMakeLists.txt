@@ -41,7 +41,7 @@ option( LIBAKRYPT_TLS_13 "Build library with TLS 1.3 protocol support" OFF )
 option( LIBAKRYPT_AKRYPT "Build console akrypt application" OFF )
 
 # -------------------------------------------------------------------------------------------------- #
-set( CMAKE_BUILD_TYPE Release )
+set( CMAKE_BUILD_TYPE Debug )
 
 # -------------------------------------------------------------------------------------------------- #
 if( LIBAKRYPT_FIOT )
@@ -314,6 +314,8 @@ endif()
 set( EXAMPLES_LIST hello
                    log
                    buffer
+                   fiot-server
+                   fiot-client
 )
 if( LIBAKRYPT_CRYPTO_FUNCTIONS )
   set( EXAMPLES_LIST ${EXAMPLES_LIST}

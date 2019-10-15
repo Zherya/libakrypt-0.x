@@ -28,7 +28,8 @@
     \return Функция возвращает \ref ak_error_ok (ноль) в случае успеха.
     Иначе, возвращается код ошибки.                                                                */
 /* ----------------------------------------------------------------------------------------------- */
- static int ak_fiot_context_write_client_hello( ak_fiot fctx, size_t *extcount )
+ static int ak_fiot_context_write_client_hello( ak_fiot fctx, size_t *extcount,
+                                                char *serverIP, unsigned short serverPort )
 {
   struct wpoint wp;
   int error = ak_error_ok;
@@ -97,6 +98,9 @@
    if(( error = ak_mac_context_update( &fctx->comp, message, meslen )) != ak_error_ok )
      return ak_error_message( error, __func__, "incorrect updating of hash function context" );
 
+  /* создаем сокет для взаимодействия с указанным сервером */
+  if (( error = fctx->socket_create(fctx, serverIP, serverPort )) != ak_error_ok)
+      return ak_error_message( error, __func__, "incorrect client socket creation" );
   /* отправляем собранное сообщение в канал связи */
    if(( error = ak_fiot_context_write_frame( fctx, message, meslen,
                                                      plain_frame, client_hello )) != ak_error_ok )
@@ -113,7 +117,8 @@
     \return Функция возвращает \ref ak_error_ok (ноль) в случае успеха.
     Иначе, возвращается код ошибки.                                                                */
 /* ----------------------------------------------------------------------------------------------- */
- static int ak_fiot_context_read_client_hello( ak_fiot fctx, size_t *extcount )
+ static int ak_fiot_context_read_client_hello( ak_fiot fctx, size_t *extcount,
+                                               char *serverIP, unsigned short serverPort )
 {
   key_type_t kt;
   block_cipher_t bc;
@@ -124,6 +129,9 @@
   size_t offset = 0, framelen = 0, meslen = 0, esize = 0, ilen = 0;
   ak_uint8 *frame = NULL, *message = NULL, zero[5] = { 0, 0, 0, 0, 0 }, out[64];
 
+ /* Создаем сокет с указанным адресом для взаимодействия с первым подключившимся клиентом */
+  if (( error = fctx->socket_create(fctx, serverIP, serverPort )) != ak_error_ok)
+      return ak_error_message( error, __func__, "incorrect server socket creation" );
  /* считываем данные */
   if(( frame = ak_fiot_context_read_frame_ptr( fctx, &offset, &framelen, &ftype )) == NULL )
     return ak_error_message( ak_error_get_value(), __func__,
@@ -1085,7 +1093,7 @@
     \return Функция возвращает \ref ak_error_ok (ноль) в случае успеха.
     В случае возникновения ошибки возвращается ее код.                                             */
 /* ----------------------------------------------------------------------------------------------- */
- int ak_fiot_context_keys_generation_protocol( ak_fiot fctx )
+ int ak_fiot_context_keys_generation_protocol( ak_fiot fctx, char *serverIP, unsigned short serverPort )
 {
   size_t i, extcount = 0;
   int error = ak_error_ok;
@@ -1099,7 +1107,7 @@
       switch( fctx->state ) {
        /* реализуем возможные состояния клиента */
         case rts_client_hello:
-           if(( error = ak_fiot_context_write_client_hello( fctx, &extcount )) != ak_error_ok )
+           if(( error = ak_fiot_context_write_client_hello( fctx, &extcount, serverIP, serverPort )) != ak_error_ok )
              return ak_error_message( error, __func__, "incorrect sending clientHello message" );
            fctx->state = rts_client_extension;
           break;
@@ -1181,7 +1189,7 @@
 
        /* реализуем возможные состояния сервера */
         case wait_client_hello:
-           if(( error = ak_fiot_context_read_client_hello( fctx, &extcount )) != ak_error_ok )
+           if(( error = ak_fiot_context_read_client_hello( fctx, &extcount, serverIP, serverPort )) != ak_error_ok )
              return ak_error_message( error, __func__, "incorrect reading clientHello message" );
            fctx->state = wait_client_extension;
           break;
@@ -1269,6 +1277,11 @@
   } while(( fctx->state != wait_client_application_data ) &&
                 ( fctx->state != wait_server_application_data ));
 
+ /* Устанавливаем размер примного буфера в размер по умолчанию, так как
+  * размер был увеличен с целью избежания ошибок при протоколе выработки
+  * ключей (на случай использования UDP): */
+ ak_buffer_free( &fctx->inframe );
+ ak_buffer_set_size( &fctx->inframe, fiot_frame_size );
  /* перед завершением протокола вырабатываем общую ключевую информацию */
  return ak_fiot_context_create_ats_keys( fctx );
 }

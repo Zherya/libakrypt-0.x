@@ -84,6 +84,156 @@
 /* ----------------------------------------------------------------------------------------------- */
 
 /* ----------------------------------------------------------------------------------------------- */
+int ak_fiot_context_connect_tcp_socket(ak_fiot fctx, char *serverIP, unsigned short serverPort) {
+    if (fctx == NULL)
+        return ak_error_message(ak_error_null_pointer, __func__, "using null pointer to fiot context");
+
+    int error = ak_error_ok;
+    /* Для клиента - это дескриптор единственного сокета для отправки/получения пакетов.
+     * Для сервера - дескриптор прослушиваемого сокета, через который принимается соединиение: */
+    ak_socket socketFD = ak_network_undefined_socket;
+    /* Структура адреса сервера: клиент отправляет на этот адрес пакеты,
+     * сервер привязывает этот адрес к прослушиваемому сокету.
+     * Будем использовать универсальную структуру sockaddr, чтобы
+     * обеспечить поддержку и IPv4, и IPv6: */
+    struct sockaddr serverAddress;
+    memset(&serverAddress, 0, sizeof(serverAddress));
+    /* По длине IP-адреса определим семейство: AF_INET (IPv4)
+     * или AF_INET6 (IPv6) и установим IP-адрес и порт: */
+    void *IPaddrField;
+    if (strlen(serverIP) <= 15) {
+        serverAddress.sa_family = AF_INET;
+        IPaddrField = &((struct sockaddr_in *)&serverAddress)->sin_addr;
+        ((struct sockaddr_in *)&serverAddress)->sin_port = htons(serverPort);
+    }
+    else {
+        serverAddress.sa_family = AF_INET6;
+        IPaddrField = &((struct sockaddr_in6 *)&serverAddress)->sin6_addr;
+        ((struct sockaddr_in6 *)&serverAddress)->sin6_port = htons(serverPort);
+    }
+    if ((error = ak_network_inet_pton(serverAddress.sa_family, serverIP, IPaddrField)) != ak_error_ok)
+        return ak_error_message(error, __func__, "wrong IP-address convertation");
+
+    /* Создание сокета: */
+    if ((socketFD = ak_network_socket(serverAddress.sa_family, SOCK_STREAM, 0)) == ak_network_undefined_socket)
+        return ak_error_message(ak_error_open_socket, __func__, "wrong TCP-socket creation");
+
+    switch(fctx->role) {
+        case client_role:
+            /* Клиент устанавливает соединение с сервером и дескриптор сокета в контекст fiot: */
+            if ((error = ak_network_connect(socketFD, &serverAddress, sizeof(serverAddress))) != ak_error_ok) {
+                ak_network_close(socketFD);
+                return ak_error_message(error, __func__, "wrong connection to server");
+            }
+            ak_fiot_context_set_interface_descriptor(fctx, encryption_interface, socketFD);
+            break;
+
+        case server_role:
+            /* Сервер привязывает к сокету свой адрес и ожидает подключения клиента: */
+            if ((error = ak_network_bind(socketFD, &serverAddress, sizeof(serverAddress))) != ak_error_ok) {
+                ak_network_close(socketFD);
+                return ak_error_message(error, __func__, "wrong address binding to socket");
+            }
+            if ((error = ak_network_listen(socketFD, 1)) != ak_error_ok) {
+                ak_network_close(socketFD);
+                return ak_error_message(error, __func__, "wrong starting listening on socket");
+            }
+            /* Принятие соединения клиента и создание нового сокета для взаимодействия с ним: */
+            ak_socket acceptedSockFD = ak_network_undefined_socket;
+            if ((acceptedSockFD = ak_network_accept(socketFD, NULL, NULL)) == ak_network_undefined_socket) {
+                ak_network_close(socketFD);
+                return ak_error_message(ak_error_accept_socket, __func__, "wrong connection accepting on socket");
+            }
+            /* Закрываем прослушиваемый сокет и устанавливаем дескриптор сокета
+             * для взаимодействия с клиентом в контекст fiot: */
+            ak_network_close(socketFD);
+            ak_fiot_context_set_interface_descriptor(fctx, encryption_interface, acceptedSockFD);
+            break;
+
+        default:
+            return ak_error_message(fiot_error_wrong_role, __func__, "using a wrong role of user indentifier");
+    }
+    return ak_error_ok;
+}
+
+/* ----------------------------------------------------------------------------------------------- */
+int ak_fiot_context_connect_udp_socket(ak_fiot fctx, char *serverIP, unsigned short serverPort) {
+    if (fctx == NULL)
+        return ak_error_message(ak_error_null_pointer, __func__, "using null pointer to fiot context");
+
+    int error = ak_error_ok;
+    /* Для клиента - это дескриптор единственного сокета для отправки/получения пакетов.
+     * Для сервера - дескриптор прослушиваемого сокета, через который принимается соединиение: */
+    ak_socket socketFD = ak_network_undefined_socket;
+    /* Структура адреса сервера: клиент отправляет на этот адрес пакеты,
+     * сервер привязывает этот адрес к прослушиваемому сокету.
+     * Будем использовать универсальную структуру sockaddr, чтобы
+     * обеспечить поддержку и IPv4, и IPv6: */
+    struct sockaddr serverAddress;
+    memset(&serverAddress, 0, sizeof(serverAddress));
+    /* По длине IP-адреса определим семейство: AF_INET (IPv4)
+     * или AF_INET6 (IPv6) и установим IP-адрес и порт: */
+    void *IPaddrField;
+    if (strlen(serverIP) <= 15) {
+        serverAddress.sa_family = AF_INET;
+        IPaddrField = &((struct sockaddr_in *)&serverAddress)->sin_addr;
+        ((struct sockaddr_in *)&serverAddress)->sin_port = htons(serverPort);
+    }
+    else {
+        serverAddress.sa_family = AF_INET6;
+        IPaddrField = &((struct sockaddr_in6 *)&serverAddress)->sin6_addr;
+        ((struct sockaddr_in6 *)&serverAddress)->sin6_port = htons(serverPort);
+    }
+    if ((error = ak_network_inet_pton(serverAddress.sa_family, serverIP, IPaddrField)) != ak_error_ok)
+        return ak_error_message(error, __func__, "wrong IP-address convertation");
+
+    /* Создание сокета: */
+    if ((socketFD = ak_network_socket(serverAddress.sa_family, SOCK_DGRAM, 0)) == ak_network_undefined_socket)
+        return ak_error_message(ak_error_open_socket, __func__, "wrong UDP-socket creation");
+
+    switch(fctx->role) {
+        case client_role:
+            /* С помощью функции connect() сделаем UDP-сокет присоединенным
+             * (настроенным на обмен пакетами только с указанным сервером).
+             * Это позволяет использовать read()/write() на сокете
+             * (т.е. не указывать адрес получателя) и повышает быстродействие: */
+            if ((error = ak_network_connect(socketFD, &serverAddress, sizeof(serverAddress))) != ak_error_ok) {
+                ak_network_close(socketFD);
+                return ak_error_message(error, __func__, "wrong UDP-connection to server address");
+            }
+            break;
+
+        case server_role:
+            /* Сервер привязывает к сокету свой адрес и ожидает первое сообщение от клиента,
+             * чтобы так же сделать connect на полученный адрес клиента: */
+            if ((error = ak_network_bind(socketFD, &serverAddress, sizeof(serverAddress))) != ak_error_ok) {
+                ak_network_close(socketFD);
+                return ak_error_message(error, __func__, "wrong address binding to socket");
+            }
+            struct sockaddr clientAddress;
+            socklen_t addressLen = sizeof(clientAddress);
+            /* Вызываем recvfrom() с флагом MSG_PEEK, чтобы только лишь
+             * получить адрес отправителя для вызова connect(), оставляя
+             * сообщение непрочитанным, так как роль данной функции -
+             * только создание и настройка сокета: */
+            if (ak_network_recvfrom(socketFD, fctx->inframe.data, 1, MSG_PEEK, &clientAddress, &addressLen) <= 0) {
+                ak_network_close(socketFD);
+                return ak_error_message(ak_error_read_data, __func__, "wrong first client message receiving");
+            }
+            if (ak_network_connect(socketFD, &clientAddress, addressLen) != ak_error_ok) {
+                ak_network_close(socketFD);
+                return ak_error_message(error, __func__, "wrong UDP-connection to client address");
+            }
+            break;
+
+        default:
+            return ak_error_message(fiot_error_wrong_role, __func__, "using a wrong role of user indentifier");
+    }
+    ak_fiot_context_set_interface_descriptor(fctx, encryption_interface, socketFD);
+    return ak_error_ok;
+}
+
+/* ----------------------------------------------------------------------------------------------- */
 /*! \brief Функция инициализирует базовые поля контекста защищенного соединения.
     \param fctx Контекст защищенного соединения протокола sp fiot. Под контекст должна быть
     заранее выделена память.
@@ -97,10 +247,13 @@
 
    if( fctx == NULL ) return ak_error_message( ak_error_null_pointer, __func__,
                                                            "using null pointer to fiot context" );
-  /* устанавливаем максимальный размер буффера для хранения передаваемых/получаемых данных */
+  /* устанавливаем максимальный размер буффера для хранения передаваемых/получаемых данных.
+   * Для приемного буфера устанавливаем самый максимальный для протокола размер фрейма, чтобы
+   * на время выполнения протокола генерации ключей обеспечить максимальное приемное окно в
+   * случае UDP, во избежание ошибок */
    if(( error = ak_buffer_create_size( &fctx->oframe, fiot_frame_size )) != ak_error_ok )
      return ak_error_message( error, __func__, "incorrect creation of output buffer" );
-   if(( error = ak_buffer_create_size( &fctx->inframe, fiot_frame_size )) != ak_error_ok ) {
+   if(( error = ak_buffer_create_size( &fctx->inframe, fiot_max_frame_size )) != ak_error_ok ) {
      ak_buffer_destroy( &fctx->oframe );
      return ak_error_message( error, __func__, "incorrect creation of input buffer" );
    }
@@ -124,6 +277,10 @@
 
   /* дескрипторы сокетов */
    fctx->iface_enc = fctx->iface_plain = ak_network_undefined_socket;
+
+   /* Устанавливаем транспортный (по OSI) протокол в канале связи */
+   fctx->osi_transport_protocol = TCP;
+   fctx->socket_create = ak_fiot_context_connect_tcp_socket;
 
   /* устанавливаем функции чтения и записи по-умолчанию */
 #ifdef LIBAKRYPT_HAVE_WINDOWS_H
@@ -641,6 +798,33 @@
                                                             "using a wrong value of gate type" );
   }
  return fiot_error_wrong_interface;
+}
+
+/* ----------------------------------------------------------------------------------------------- */
+int ak_fiot_context_set_osi_transport_protocol( ak_fiot fctx, osi_transport_protocol_t proto)
+{
+    if( fctx == NULL ) return ak_error_message( ak_error_null_pointer, __func__,
+                                                "using a null pointer to fiot context" );
+    switch( proto ) {
+        case TCP:
+            fctx->osi_transport_protocol = TCP;
+            fctx->socket_create = ak_fiot_context_connect_tcp_socket;
+            return ak_error_ok;
+        case UDP:
+            fctx->osi_transport_protocol = UDP;
+            fctx->socket_create = ak_fiot_context_connect_udp_socket;
+            return ak_error_ok;
+        default:
+            return ak_error_message( fiot_error_wrong_osi_transport_protocol,
+                                     __func__, "using wrong osi transport protocol type" );
+    }
+}
+
+/* ----------------------------------------------------------------------------------------------- */
+osi_transport_protocol_t ak_fiot_context_get_osi_transport_protocol( ak_fiot fctx ) {
+    if( fctx == NULL ) return ak_error_message( ak_error_null_pointer, __func__,
+                                                "using a null pointer to fiot context" );
+    return fctx->osi_transport_protocol;
 }
 
 /* ----------------------------------------------------------------------------------------------- */
