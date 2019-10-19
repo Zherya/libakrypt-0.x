@@ -36,7 +36,7 @@
   /* часть первая: создание сокетов */
 
   /* выполняем действия, необходимые для соединения с сервером  */
-   if(( sock = ak_network_socket( AF_INET, SOCK_STREAM, 0 )) == ak_network_undefined_socket ) {
+   /*if(( sock = ak_network_socket( AF_INET, SOCK_STREAM, 0 )) == ak_network_undefined_socket ) {
      ak_error_message( ak_error_get_value(), __func__, "wrong socket creation" );
      return ak_libakrypt_destroy();
    }
@@ -56,7 +56,7 @@
      ak_error_message_fmt( error, __func__, "wrong server connect" );
      return ak_libakrypt_destroy();
    }
-   printf("echo-client: server connected on %s:%s\n", argv[1], argv[2] );
+   printf("echo-client: server connected on %s:%s\n", argv[1], argv[2] );*/
 
 
   /* часть вторая: аутентификация клиента и выполнение протокола выработки общих ключей */
@@ -85,7 +85,7 @@
    if(( error = ak_fiot_context_set_initial_crypto_mechanism( &ctx,
                                              magmaGOST3413ePSK )) != ak_error_ok ) goto exit;
   /* здесь реализация протокола */
-   if(( error = ak_fiot_context_keys_generation_protocol( &ctx )) != ak_error_ok ) goto exit;
+   if(( error = ak_fiot_context_keys_generation_protocol( &ctx, argv[1], atoi(argv[2]) )) != ak_error_ok ) goto exit;
    printf( "echo-client: server authentication is Ok\n" );
 
   /* принудительно ужесточаем ограничения на объем передаваемых данных;

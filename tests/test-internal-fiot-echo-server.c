@@ -40,12 +40,12 @@
 
   /* инициализируем библиотеку на стороне сервера
      вывод сообщений аудита производится в стандартный поток ошибок */
-   if( !ak_libakrypt_create( ak_function_log_stderr )) return ak_libakrypt_destroy();
+   //if( !ak_libakrypt_create( ak_function_log_stderr )) return ak_libakrypt_destroy();
   /* устанавливаем максимальный уровень аудита */
-   ak_log_set_level( fiot_log_maximum );
+   //ak_log_set_level( fiot_log_maximum );
 
   /* создаем сокет */
-   if(( listenfd = ak_network_socket( AF_INET, SOCK_STREAM, 0 )) == ak_network_undefined_socket )
+   /*if(( listenfd = ak_network_socket( AF_INET, SOCK_STREAM, 0 )) == ak_network_undefined_socket )
      return ak_error_message_fmt( -1,  __func__,
                                           "wrong creation of listening socket (%s)", strerror(errno));
    memset( &servaddr, 0, sizeof( struct sockaddr_in ));
@@ -53,33 +53,33 @@
    if( ak_network_inet_pton( AF_INET, argv[1], &servaddr.sin_addr.s_addr ) != ak_error_ok )
      return ak_error_message_fmt( -1, __func__, "incorrect assigning server ip %s address (%s)",
                                                                           argv[1], strerror( errno ));
-   servaddr.sin_port = htons( atoi( argv[2] ));
+   servaddr.sin_port = htons( atoi( argv[2] ));*/
 
   /* разрешаем запускать bind() на используемом адресе */
-   ak_network_setsockopt( listenfd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof ( reuse ));
+   /*ak_network_setsockopt( listenfd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof ( reuse ));
    if( ak_network_bind( listenfd,  &servaddr, sizeof( servaddr )) != ak_error_ok )
      return ak_error_message_fmt( -1, __func__,
-                                          "wrong binding of listening socket (%s)", strerror(errno));
+                                          "wrong binding of listening socket (%s)", strerror(errno));*/
   /* начинаем процесс прослушивания сокета */
-   if( ak_network_listen( listenfd, 5 ) != ak_error_ok )
+   /*if( ak_network_listen( listenfd, 5 ) != ak_error_ok )
      return ak_error_message_fmt( ak_error_get_value(), __func__,
                                         "wrong listening of incomming socket" );
-   printf("echo-server: listening socket is up on %s:%s\n", argv[1], argv[2] );
+   printf("echo-server: listening socket is up on %s:%s\n", argv[1], argv[2] );*/
 
   /* принимаем соединения */
-   opt = sizeof( cl_addr );
+   /*opt = sizeof( cl_addr );
    if(( fd = ak_network_accept( listenfd, &cl_addr, &opt )) == -1 )
-     return ak_error_message_fmt( -1, __func__, "wrong accepting connection (%s)", strerror(errno));
+     return ak_error_message_fmt( -1, __func__, "wrong accepting connection (%s)", strerror(errno));*/
 
   /* определяем координаты клиента */
-   len = sizeof( struct sockaddr_in );
+   /*len = sizeof( struct sockaddr_in );
    if( ak_network_getpeername( fd, (struct sockaddr *)&cl_addr, &len ) != ak_error_ok )
      return ak_error_message_fmt( -1, __func__,
                                            "can't determine client's peer (%s)", strerror( errno ));
    if( ak_network_inet_ntop( AF_INET, &cl_addr.sin_addr, ip, (socklen_t) sizeof( ip )) == NULL )
      return ak_error_message_fmt( -1, __func__,
                                         "can't determine client's address (%s)", strerror( errno ));
-   printf( "echo-server: accepted client from %s:%u\n", ip, cl_addr.sin_port );
+   printf( "echo-server: accepted client from %s:%u\n", ip, cl_addr.sin_port );*/
 
 
   /* часть вторая: аутентификация клиента и выполнение протокола выработки общих ключей */
@@ -102,7 +102,7 @@
    if(( error =  ak_fiot_context_set_server_policy( &ctx,
                                             magmaCTRplusGOST3413 )) != ak_error_ok ) goto exit;
   /* теперь выполняем протокол */
-   if(( error = ak_fiot_context_keys_generation_protocol( &ctx )) != ak_error_ok ) goto exit;
+   if(( error = ak_fiot_context_keys_generation_protocol( &ctx, argv[1], atoi( argv[2] )) != ak_error_ok ) goto exit;
    printf( "echo-server: client authentication is Ok\n" );
 
 
