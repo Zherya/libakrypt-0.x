@@ -85,7 +85,7 @@
    if(( error = ak_fiot_context_set_initial_crypto_mechanism( &ctx,
                                              magmaGOST3413ePSK )) != ak_error_ok ) goto exit;
   /* здесь реализация протокола */
-   if(( error = ak_fiot_context_keys_generation_protocol( &ctx, argv[1], atoi(argv[2]) )) != ak_error_ok ) goto exit;
+   if(( error = ak_fiot_context_keys_generation_protocol( &ctx, argv[1], atoi(argv[2]) ) ) != ak_error_ok ) goto exit;
    printf( "echo-client: server authentication is Ok\n" );
 
   /* принудительно ужесточаем ограничения на объем передаваемых данных;

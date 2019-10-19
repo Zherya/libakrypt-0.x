@@ -102,7 +102,7 @@
    if(( error =  ak_fiot_context_set_server_policy( &ctx,
                                             magmaCTRplusGOST3413 )) != ak_error_ok ) goto exit;
   /* теперь выполняем протокол */
-   if(( error = ak_fiot_context_keys_generation_protocol( &ctx, argv[1], atoi( argv[2] )) != ak_error_ok ) goto exit;
+   if(( error = ak_fiot_context_keys_generation_protocol( &ctx, argv[1], atoi(argv[2]) ) ) != ak_error_ok ) goto exit;
    printf( "echo-server: client authentication is Ok\n" );
 
 
