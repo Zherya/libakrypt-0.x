@@ -7,6 +7,18 @@
 
 int main(int argc, char *argv[]) {
 
+    if (argc != 3) {
+        printf("Использование: example-fiot-server <IP-адрес сервера> <номер порта сервера>\n");
+        return 0;
+    }
+    /* Переведем номер порта в числовой формат: */
+    unsigned long ulongServerPort = strtoul(argv[2], NULL, 0);
+    if (ulongServerPort > 65535) {
+        printf("Значение номера порта не может превышать значение 65535\n");
+        return 0;
+    }
+    unsigned short serverPort = ulongServerPort;
+
     /* Инициализируем библиотеку libakrypt
      * с выводом сообщений аудита в стандартный поток ошибок: */
     if (!ak_libakrypt_create(ak_function_log_stderr))
@@ -47,7 +59,7 @@ int main(int argc, char *argv[]) {
     }
     /* Выполнение протокола выработки ключей: */
     printf("Ожидание подключения клиента...\n");
-    if (ak_fiot_context_keys_generation_protocol(&fiotContext, "192.168.1.37", 50014) != ak_error_ok) {
+    if (ak_fiot_context_keys_generation_protocol(&fiotContext, argv[1], serverPort) != ak_error_ok) {
         printf("Ошибка выполнения протокола выработки ключей\n");
         ak_fiot_context_destroy(&fiotContext);
         return ak_libakrypt_destroy();
