@@ -78,7 +78,14 @@ int main(int argc, char *argv[]) {
 
     /* Устанавливаем нужный транспортный (по OSI) протокол: */
     if (ak_fiot_context_set_osi_transport_protocol(&fiotContext, UDP) != ak_error_ok) {
-        printf("Ошибка установки протокола UDP как транспортного протокола sp fiot\n");
+        printf("Ошибка установки протокола UDP как транспортного протокола (по OSI) sp fiot\n");
+        ak_fiot_context_destroy(&fiotContext);
+        return ak_libakrypt_destroy();
+    }
+
+    /* Устанавливаем для передачи прикладных данных протокол ESP: */
+    if (ak_fiot_context_set_esp_transport_protocol(&fiotContext, kuznechikESPAEAD) != ak_error_ok) {
+        printf("Ошибка установки протокола ESP как транспортного протокола sp fiot\n");
         ak_fiot_context_destroy(&fiotContext);
         return ak_libakrypt_destroy();
     }
@@ -96,7 +103,6 @@ int main(int argc, char *argv[]) {
     char sent[2048];
     ak_uint8 *received;
     size_t receivedLength;
-    message_t messageType = undefined_message;
     bool_t done = ak_false;
     int error;
     do {
@@ -113,13 +119,19 @@ int main(int argc, char *argv[]) {
         sent[strlen(sent) - 1] = '\0';
 
         /* Отправляем сообщение серверу: */
-        if ((error = ak_fiot_context_write_application_data(&fiotContext, sent, strlen(sent) + 1)) != ak_error_ok)
+        if ((error = ak_fiot_context_write_application_data(&fiotContext, sent, strlen(sent) + 1)) != ak_error_ok) {
             ak_error_message(error, __func__, "Ошибка отправки сообщения серверу");
+            /* Сбрасываем ошибку: */
+            ak_error_set_value(ak_error_ok);
+        }
         else {
             printf("Сообщение длиной %zu байт(а) отправлено серверу\n", strlen(sent) + 1);
             /* Получаем ответ: */
-            if ((received = ak_fiot_context_read_frame(&fiotContext, &receivedLength, &messageType)) == NULL)
+            if ((received = ak_fiot_context_read_application_data(&fiotContext, &receivedLength)) == NULL) {
                 ak_error_message(ak_error_get_value(), __func__, "Ошибка получения ответа от сервера");
+                /* Сбрасываем ошибку: */
+                ak_error_set_value(ak_error_ok);
+            }
             else
                 printf("Ответ \"%s\" длиной %zu байт(а) получен от сервера\n", received, receivedLength);
         }

@@ -463,7 +463,7 @@
     определяется значением `fctx->oframe_size`, которое может изменяться пользователем.
 
     После разбиения, все фрагменты, последовательно, отправляются в канал связи
-    с помощью функции ak_fiot_context_write_frame().
+    с помощью заданной функции формирования фреймов.
     Все передаваемые данные помещаются во фреймы типа application data и зашифровываются.
 
     \param fctx Контекст защищенного соединения протокола sp fiot.
@@ -487,7 +487,7 @@
 
   while( datalen > 0 ) {
     ilen = ak_min( meslen, datalen ); /* получаем длину отправляемого фрагмента */
-    if(( error = ak_fiot_context_write_frame( fctx,
+    if(( error = fctx->write_frame( fctx,
                              dataptr, ilen, encrypted_frame, application_data )) != ak_error_ok )
       return ak_error_message( error, __func__, "write application data error" );
     dataptr += ilen; datalen -= ilen;
@@ -524,12 +524,15 @@
        ( fctx->state != wait_server_application_data )) {
      data[2] = ( ak_uint8 )(( streebog256 >> 8 )%256 );
      data[3] = ( ak_uint8 )( streebog256%256 );
+     /* Если имеет место протокол выработки ключей,
+      * то жестко используем транспортный протокол fiot: */
      if(( error = ak_fiot_context_write_frame( fctx, data, datalen,
                                                       plain_frame, alert_message)) != ak_error_ok )
       return ak_error_message( error, __func__, "write alert message error" );
   } else {
      data[2] = data[3] = 0;
-     if(( error = ak_fiot_context_write_frame( fctx, data, datalen,
+     /* Иначе используем установленный для передачи прикладных данных транспортный протокол: */
+     if(( error = fctx->write_frame( fctx, data, datalen,
                                                   encrypted_frame, alert_message)) != ak_error_ok )
       return ak_error_message( error, __func__, "write alert message error" );
     }
@@ -775,6 +778,151 @@
    *length += frame[ offset++ ];
 
  return frame + offset;
+}
+
+/* ----------------------------------------------------------------------------------------------- */
+/*! \brief Функция получения сообщения прикладного уровня. Функция получает данные из канала
+ * связи, проверяет, что они относятся к прикладным данным, и возвращает результат
+ *
+ * @param fctx Указатель на контекст fiot
+ * @param length Указатель, по которому записывается длина полученных данных
+ *
+ * @return В случае успеха возвращается указатель на полученные данные, иначе - NULL,
+ * при этом код ошибки может быть получен с помощью функции ak_error_get_value()
+ */
+ak_uint8 *ak_fiot_context_read_application_data( ak_fiot fctx, size_t *length ) {
+    if( fctx == NULL ) {
+        ak_error_message(ak_error_null_pointer, __func__, "using null pointer to fiot context");
+        return NULL;
+    }
+    /* Получаем сообщение: */
+    message_t mtype;
+    ak_uint8 *message = fctx->read_frame(fctx, length, &mtype);
+    if (message == NULL) {
+        ak_error_message(ak_error_get_value(), __func__, "error of reading frame");
+        return NULL;
+    }
+
+    /* Проверяем, что полученное сообщение содержит прикладные данные: */
+    if (mtype != application_data) {
+        ak_error_message(fiot_error_message_type, __func__, "wrong message type of incoming frame");
+        return NULL;
+    }
+
+    return message;
+}
+
+/* ----------------------------------------------------------------------------------------------- */
+/*! \brief Отправка сообщения с помощью протокола ESP
+ *
+ * @param fctx Указатель на контекст fiot
+ * @param data Указатель на отправляемые данные
+ * @param datalen Размер отправляемых данных в байтах
+ * @param ftype Тип отправляемого фрейма (отправляется в зашифрованном виде или нет)
+ * @param mtype Тип отправляемых данных (сообщения)
+ *
+ * @return В случае успеха возвращается ak_error_ok, иначе - код ошибки
+ */
+int ak_fiot_context_write_esp_frame( ak_fiot fctx,
+                                      ak_pointer data, size_t datalen, frame_type_t ftype, message_t mtype ) {
+    int error = ak_error_ok;
+    size_t meslen = 0, framelen = 0;
+    ak_uint8 *message = NULL;
+    transform_t transform = undefined_transform;
+
+    /* Выполняем минимальные проверки */
+    if( fctx->iface_enc == undefined_interface ) return fiot_error_wrong_interface;
+    if( datalen < 1 ) return ak_error_zero_length; /* мы отправляем хотя бы один байт информации */
+
+    /* Определяем, какой трансформ ESP необходимо использовать: */
+    transform = ak_esp_context_get_transform(fctx->esp_ctx);
+    if( ftype == plain_frame )  {
+        /* Если сейчас используется шифрование, то нужно сменить трансформ на симметричный: */
+        if (transform == encr_kuznyechik_mgm_ktree || transform == encr_magma_mgm_ktree)
+            ak_esp_context_switch_transform(fctx->esp_ctx);
+    } else {
+        /* Если шифрования нет, то также необходимо сменить трансформ на симметричный: */
+        if (transform == encr_kuznyechik_mgm_mac_ktree || transform == encr_magma_mgm_mac_ktree)
+            ak_esp_context_switch_transform(fctx->esp_ctx);
+    }
+
+    /* Определяем размер сообщения, упаковываемого в ESP: */
+    meslen = 3 /* истинная длина сообщения + его тип */ + datalen; /* собственно данные */
+
+    /* Выделим память под сообщение, упаковываемое в ESP: */
+    if ((message = malloc(meslen)) == NULL)
+        return ak_error_out_of_memory;
+
+    /* теперь собираем сообщение по кусочкам */
+    /* тип и размер сообщения */
+    message[0] = ( ak_uint8 ) mtype;
+    message[1] = ( ak_uint8 )(( datalen >> 8 )%256 );
+    message[2] = ( ak_uint8 )( datalen%256 );
+    /* полезные данные */
+    memcpy( message + 3, data, datalen );
+
+    /* Формируем ESP-пакет (61 - идентификатор произвольного внутреннего протокола хоста): */
+    if ((framelen = ak_esp_context_write_packet(fctx->esp_ctx, message, meslen, 61, fctx->oframe.data)) == 0)
+        return ak_error_get_value();
+    free(message);
+
+    /* Отправляем пакет в канал связи: */
+    if( fctx->write( fctx->iface_enc, fctx->oframe.data, framelen ) != ( ssize_t ) framelen )
+        return ak_error_write_data;
+
+    return ak_error_ok;
+}
+
+/* ----------------------------------------------------------------------------------------------- */
+/*! \brief Получение данных по протоколу ESP из канала связи.
+ *
+ * @param fctx Указатель на контекст fiot
+ * @param length Указатель, по которому будет записана длина полученных данных в байтах
+ * @param mtype Указатель, по которому будет записан тип полученных данных (сообщения)
+ *
+ * @return В случае успеха возвращает указатель на полученные данные, иначе - NULL. При этом
+ * код ошибки может быть получен с помощью функции ak_error_get_value()
+ */
+ak_uint8* ak_fiot_context_read_esp_frame( ak_fiot fctx, size_t *length, message_t *mtype ) {
+    ak_uint8 *frame = NULL;
+    ssize_t framelen = 0;
+    size_t meslen = 0;
+
+    /* необходимые проверки */
+    if( fctx->iface_enc == undefined_interface ) {
+        ak_error_set_value( fiot_error_wrong_interface );
+        return NULL;
+    }
+    if(( fctx->inframe.data == NULL ) || ( fctx->inframe.size == 0 )) {
+        ak_error_set_value( ak_error_wrong_buffer );
+        return NULL;
+    }
+
+    /* Считываем данные из канала связи во временный буфер: */
+    if ((frame = malloc(fctx->inframe.size)) == NULL) {
+        ak_error_set_value( ak_error_out_of_memory );
+        return NULL;
+    }
+    framelen = ak_fiot_context_read_ptr_timeout(fctx,
+                                                     encryption_interface, frame, fctx->inframe.size);
+    if (framelen <= 0) {
+        ak_error_set_value( ak_error_read_data_timeout );
+        return NULL;
+    }
+
+    /* Очищаем входной буфер: */
+    memset(fctx->inframe.data, 0, fctx->inframe.size);
+
+    /* Расшифровываем ESP-пакет и записываем полезные данные во входной буфер контекста: */
+    if ((meslen = ak_esp_context_read_packet(fctx->esp_ctx, frame, framelen, fctx->inframe.data)) == 0)
+        return NULL;
+    free(frame);
+    frame = fctx->inframe.data;
+
+    /* Записываем выходные данные: */
+    *mtype = ( message_t )frame[0];
+    *length = frame[1] * 256 + frame[2];
+    return frame + 3;
 }
 
 /* ----------------------------------------------------------------------------------------------- */

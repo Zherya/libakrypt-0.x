@@ -84,6 +84,18 @@
 /* ----------------------------------------------------------------------------------------------- */
 
 /* ----------------------------------------------------------------------------------------------- */
+/*! \brief Функция:
+ * Создает сокет (с заданным IP-адресом и номером порта) и настраивает его на
+ * TCP-соединение с первым подключивщися клиентом, в случае сервера;
+ * Создает сокет и устанавливает TCP-соединение с заданным IP-адресом и номера порта сервера,
+ * в случае клиента.
+ *
+ * @param fctx Указатель на контекст протокола fiot
+ * @param serverIP Указатель на IPv4/IPv6-адрес сервера в виде текстовой строки
+ * @param serverPort Номер порта сервера
+ *
+ * @return  В случае успеха функция возвращает ak_error_ok, иначе - код ошибки
+ */
 int ak_fiot_context_connect_tcp_socket(ak_fiot fctx, char *serverIP, unsigned short serverPort) {
     if (fctx == NULL)
         return ak_error_message(ak_error_null_pointer, __func__, "using null pointer to fiot context");
@@ -157,6 +169,18 @@ int ak_fiot_context_connect_tcp_socket(ak_fiot fctx, char *serverIP, unsigned sh
 }
 
 /* ----------------------------------------------------------------------------------------------- */
+/*! \brief Функция:
+ * Создает UDP-сокет (с заданным IP-адресом и номером порта) и делает его присоединенным
+ * на адрес клиента, первого приславшего пакет, в случае сервера;
+ * Создает UDP-сокет и делает его присоединенным на заданном IP-адресе и номере порта сервера,
+ * в случае клиента.
+ *
+ * @param fctx Указатель на контекст протокола fiot
+ * @param serverIP Указатель на IPv4/IPv6-адрес сервера в виде текстовой строки
+ * @param serverPort Номер порта сервера
+ *
+ * @return  В случае успеха функция возвращает ak_error_ok, иначе - код ошибки
+ */
 int ak_fiot_context_connect_udp_socket(ak_fiot fctx, char *serverIP, unsigned short serverPort) {
     if (fctx == NULL)
         return ak_error_message(ak_error_null_pointer, __func__, "using null pointer to fiot context");
@@ -291,6 +315,11 @@ int ak_fiot_context_connect_udp_socket(ak_fiot fctx, char *serverIP, unsigned sh
    fctx->write = write;
    fctx->read = read;
 #endif
+
+   /* Устанавливаем транспортный протокол fiot как протокол по-умолчанию: */
+   fctx->esp_ctx = NULL;
+   fctx->write_frame = ak_fiot_context_write_frame;
+   fctx->read_frame = ak_fiot_context_read_frame;
 
   /* устанавливаем таймаут ожидания входящих пакетов (в секундах) */
    fctx->timeout = 3;
@@ -488,6 +517,12 @@ int ak_fiot_context_connect_udp_socket(ak_fiot fctx, char *serverIP, unsigned sh
   ak_mac_context_destroy( &fctx->icfk );
   ak_mac_context_destroy( &fctx->isfk );
 
+  /* Уничтожаем контекст протокола ESP, если он был создан: */
+  if (fctx->esp_ctx != NULL) {
+      ak_esp_context_destroy(fctx->esp_ctx);
+      free(fctx->esp_ctx);
+  }
+
  /* освобождаем базовую часть */
   if(( error = ak_fiot_context_destroy_common( fctx )) != ak_error_ok )
     ak_error_message( error, __func__ , "incorrect common part destroying of fiot context" );
@@ -516,6 +551,75 @@ int ak_fiot_context_connect_udp_socket(ak_fiot fctx, char *serverIP, unsigned sh
      } else ak_error_message( ak_error_null_pointer, __func__ ,
                                                            "using null pointer to fiot context" );
  return NULL;
+}
+
+/* ----------------------------------------------------------------------------------------------- */
+/*! \brief Установка протокола ESP в качестве транспортного протокола fiot.
+ * Для сервера данная функция также определяет политику взаимодействия на основе
+ * выбранного криптографического механизма mechanism, которая не должна затем меняться
+ * пользователем самостоятельно. На данный момент протокол ESP может использоваться
+ * только для передачи прикладных данных, когда как в протоколе выработки общих ключей
+ * используется только транспортный протокол fiot.
+ *
+ * @param fctx Указатель на контекст защищенного взаимодействия fiot
+ * @param mechanism Значение перечисления, определяющее используемый криптографический
+ * механизм. Должен быть равен kuznechikESPAEAD или magmaESPAEAD.
+ *
+ * @return В случае успеха возвращается ak_error_ok, иначе - код ошибки.
+ */
+int ak_fiot_context_set_esp_transport_protocol(ak_fiot fctx, crypto_mechanism_t mechanism) {
+    int error = ak_error_ok;
+    transform_t transform;
+    ak_uint32 SPI;
+    if( fctx == NULL )
+        return ak_error_message( ak_error_null_pointer, __func__, "using null pointer to fiot context" );
+    /* Если механизм не представляет собой AEAD-шифрование, то возвращаем ошибку: */
+    if ( mechanism != kuznechikESPAEAD && mechanism != magmaESPAEAD )
+        return ak_error_message( fiot_error_wrong_mechanism, __func__, "using not AEAD mechanism" );
+
+    /* Выделяем память под контекст ESP и инициализируем его: */
+    if ((fctx->esp_ctx = malloc(sizeof(struct esp))) == NULL)
+        return ak_error_message(ak_error_out_of_memory, __func__, "wrong esp context memory allocation");
+
+    if ((error = ak_esp_context_create(fctx->esp_ctx)) != ak_error_ok)
+        return ak_error_message(error, __func__, "wrong esp context creation");
+
+    /* Устанавливаем соответствующий криптографическому механизму ESP-трансформ: */
+    if (mechanism == kuznechikESPAEAD)
+        transform = encr_kuznyechik_mgm_ktree;
+    else
+        transform = encr_magma_mgm_ktree;
+    if ((error = ak_esp_context_set_transform(fctx->esp_ctx, transform)) != ak_error_ok)
+        return ak_error_message(error, __func__, "error of setting ESP transform");
+
+    /* Устанавливаем соответствующие функции отправки пакетов: */
+    fctx->write_frame = ak_fiot_context_write_esp_frame;
+    fctx->read_frame = ak_fiot_context_read_esp_frame;
+
+    /* Теперь необходимо указать, что при передаче прикладных данных
+     * нужно использовать AEAD-шифрование. Это делается с помощью
+     * указания политики сервера, механизм которой затем устанавливается
+     * с помощью ak_fiot_context_set_secondary_crypto_mechanism() */
+    switch (fctx->role) {
+        case server_role:
+            if ((error = ak_fiot_context_set_server_policy(fctx, mechanism)) != ak_error_ok)
+                return ak_error_message(error, __func__, "wrong server policy setting");
+        break;
+        case client_role:
+            /* В случае клиента ничего делать не нужно, информацию о механизме
+             * он получит от сервера: */
+        break;
+        case undefined_role:
+            return ak_error_message(fiot_error_wrong_role, __func__, "wrong fiot context role");
+    }
+
+    /* Устанавливаем случайный идентификатор защищищенного взаимодействия ESP: */
+    if ((error = ak_random_context_random(&fctx->plain_rnd, &SPI, 4)) != ak_error_ok)
+        return ak_error_message(error, __func__, "wrong random ESP SPI generation");
+    if ((error = ak_esp_context_set_spi(fctx->esp_ctx, SPI)) != ak_error_ok)
+        return ak_error_message(error, __func__, "wrong ESP SPI setting");
+
+    return ak_error_ok;
 }
 
 /* ----------------------------------------------------------------------------------------------- */
@@ -801,6 +905,13 @@ int ak_fiot_context_connect_udp_socket(ak_fiot fctx, char *serverIP, unsigned sh
 }
 
 /* ----------------------------------------------------------------------------------------------- */
+/*! \brief Установка заданного транспортного (по OSI) протокола
+ *
+ * @param fctx Указатель на контекст fiot
+ * @param proto Идентификатор устанавливаемого транспортного (по OSI) протокола
+ *
+ * @return В случае успеха возвращается ak_error_ok, иначе - код ошибки
+ */
 int ak_fiot_context_set_osi_transport_protocol( ak_fiot fctx, osi_transport_protocol_t proto)
 {
     if( fctx == NULL ) return ak_error_message( ak_error_null_pointer, __func__,
@@ -821,9 +932,18 @@ int ak_fiot_context_set_osi_transport_protocol( ak_fiot fctx, osi_transport_prot
 }
 
 /* ----------------------------------------------------------------------------------------------- */
+/*! \brief Получение идентификатора используемого транспортного (по OSI) протокола
+ *
+ * @param fctx Указатель на контекст fiot
+ *
+ * @return В случае успеха возвращается идентификатор протокола,
+ * иначе - undefined_osi_transport_protocol
+ */
 osi_transport_protocol_t ak_fiot_context_get_osi_transport_protocol( ak_fiot fctx ) {
-    if( fctx == NULL ) return ak_error_message( ak_error_null_pointer, __func__,
-                                                "using a null pointer to fiot context" );
+    if( fctx == NULL ) {
+        ak_error_message(ak_error_null_pointer, __func__, "using a null pointer to fiot context");
+        return undefined_osi_transport_protocol;
+    }
     return fctx->osi_transport_protocol;
 }
 
@@ -914,7 +1034,7 @@ osi_transport_protocol_t ak_fiot_context_get_osi_transport_protocol( ak_fiot fct
     В ходе выполнения функции инициализируется контекст `fctx->epsk` предварительно распределенного
     ключа аутентификации, а ключу присваивается значение, соответствующее установленному ранее
     идентификатору. Если используется аутентификация с помощью сертификатов открытых ключей,
-    то контекст `fctx->epsk` используется для бесключевого контроля елостности передаваемых сообщений.
+    то контекст `fctx->epsk` используется для бесключевого контроля целостности передаваемых сообщений.
 
     Окончательные значения криптографических механизмов,
     используемых в ходе защищенного взаимодействия, устанавливаются функцией

@@ -26,6 +26,7 @@
  #include <ak_mac.h>
  #include <ak_curves.h>
  #include <ak_network.h>
+ #include <ak_esp.h>
 
 /* ----------------------------------------------------------------------------------------------- */
 /*  Группа уникальных ошибок протокола sp fiot */
@@ -180,6 +181,8 @@
     kuznechikCTRplusGOST3413 = 0x1152,
     magmaAEAD = 0x1201,
     kuznechikAEAD = 0x1202,
+    magmaESPAEAD = 0x1251,
+    kuznechikESPAEAD = 0x1252,
 } crypto_mechanism_t;
 
 /* ----------------------------------------------------------------------------------------------- */
@@ -492,6 +495,10 @@ typedef enum {
 typedef struct fiot *ak_fiot;
 /*! \brief Общий тип функции создания и инициализации сокета. */
 typedef int ( fiot_function_socket_create )( ak_fiot, char *, unsigned short );
+/*! \brief Общий тип функции формирования, шифрования и отправки сетевых пакетов (фреймов). */
+typedef int ( fiot_function_frame_write )( ak_fiot, ak_pointer, size_t, frame_type_t, message_t );
+/*! \brief Общий тип функции чтения и расшифрования пакетов (фреймов) из канала связи. */
+typedef ak_uint8* ( fiot_function_frame_read )( ak_fiot, size_t*, message_t* );
 
 /* ----------------------------------------------------------------------------------------------- */
 /*! \brief Контекст защищенного соединения протокола sp fiot.
@@ -511,7 +518,9 @@ typedef int ( fiot_function_socket_create )( ak_fiot, char *, unsigned short );
       определяемых константами \ref fiot_min_frame_size и \ref fiot_max_frame_size. Изменение
       контролируется размерами входящих сообщений. */
    struct buffer inframe;
-
+   /*! \brief Указатель на контекст протокола ESP, который может использоваться вместо
+       транспортного протокола fiot. Если указатель равен NULL, то ESP не используется. */
+   ak_esp esp_ctx;
   /*! \brief Смещение зашифровываемых данных от начала фрейма (длина расширяемого заголовка).
       \details Для стандартного заголовка равна 8 октетам. Для расширяемого заголовка может принимать
       любое значение от восьми до 64-х. */
@@ -545,6 +554,10 @@ typedef int ( fiot_function_socket_create )( ak_fiot, char *, unsigned short );
    fiot_function_socket_write *write;
   /*! \brief Указатель на функцию получения данных из канала связи. */
    fiot_function_socket_read *read;
+  /*! \brief Указатель на функцию формирования и отправки пакетов (фреймов). */
+   fiot_function_frame_write *write_frame;
+   /*! \brief Указатель на функцию расшифрования и разбора пакетов (фреймов) из канала связи. */
+   fiot_function_frame_read *read_frame;
   /*! \brief Значение таймаута при ожидании входящих пакетов (в секундах) */
    time_t timeout;
 
@@ -645,6 +658,8 @@ typedef int ( fiot_function_socket_create )( ak_fiot, char *, unsigned short );
 /*! \brief Получение текущего идентификатора эллиптической кривой. */
  elliptic_curve_t ak_fiot_context_get_curve( ak_fiot );
 
+/*! Установка протокола ESP в качестве транспортного протокола fiot. */
+ int ak_fiot_context_set_esp_transport_protocol( ak_fiot , crypto_mechanism_t );
 /*! \brief Присвоение заданному интерфейсу контекста открытого сокета. */
  int ak_fiot_context_set_interface_descriptor( ak_fiot , interface_t, ak_socket );
 /*! \brief Получение дескриптора сокета для заданного интерфейса контекста защищенного взаимодействия. */
@@ -704,12 +719,18 @@ typedef int ( fiot_function_socket_create )( ak_fiot, char *, unsigned short );
  int ak_fiot_context_write_alert_message( ak_fiot, alert_t , char * , size_t );
 /*! \brief Формирование сообщения транспортного протокола и отправка его в канал связи. */
  int ak_fiot_context_write_frame( ak_fiot , ak_pointer , size_t , frame_type_t , message_t );
+ /*! \brief Отправка сообщения с помощью протокола ESP. */
+ int ak_fiot_context_write_esp_frame( ak_fiot , ak_pointer , size_t , frame_type_t , message_t );
+ /*! \brief Получение сообщения прикладного уровня. */
+ ak_uint8 *ak_fiot_context_read_application_data( ak_fiot , size_t * );
 /*! \brief Получение данных из канала связи в течение заданного интервала времени. */
  ssize_t ak_fiot_context_read_ptr_timeout( ak_fiot , interface_t , ak_pointer , size_t );
 /*! \brief Получение фрейма из канала связи. */
  ak_uint8 *ak_fiot_context_read_frame( ak_fiot , size_t *, message_t * );
 /*! \brief Получение данных из канала связи и преобразование их к сериализованному представлению фрейма. */
  ak_uint8 *ak_fiot_context_read_frame_ptr( ak_fiot , size_t * , size_t * , frame_type_t * );
+/*! \brief Получение данных по протоколу ESP из канала связи. */
+ ak_uint8 *ak_fiot_context_read_esp_frame( ak_fiot , size_t * , message_t * );
 
 /* ----------------------------------------------------------------------------------------------- */
 /*! \brief Вывод содержимого фрейма с использованием системы аудита. */

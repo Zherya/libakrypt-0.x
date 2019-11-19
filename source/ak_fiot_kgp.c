@@ -1283,7 +1283,35 @@
  ak_buffer_free( &fctx->inframe );
  ak_buffer_set_size( &fctx->inframe, fiot_frame_size );
  /* перед завершением протокола вырабатываем общую ключевую информацию */
- return ak_fiot_context_create_ats_keys( fctx );
+    if ((error = ak_fiot_context_create_ats_keys( fctx )) != ak_error_ok)
+        return error;
+
+    /* Если для передачи прикладных данных используется ESP,
+     * то установим общую ключевую информацию в качестве ключей и секретной соли для ESP: */
+    if (fctx->esp_ctx != NULL)
+        switch (fctx->role) {
+            case server_role:
+                if ((error = ak_esp_context_set_root_key(fctx->esp_ctx, fctx->server_ts, 32, out_packet)) != ak_error_ok)
+                    return error;
+                if ((error = ak_esp_context_set_root_key(fctx->esp_ctx, fctx->client_ts, 32, in_packet)) != ak_error_ok)
+                    return error;
+                if ((error = ak_esp_context_set_salt(fctx->esp_ctx, fctx->server_ts + 32, 32, out_packet)) != ak_error_ok)
+                    return error;
+                if ((error = ak_esp_context_set_salt(fctx->esp_ctx, fctx->client_ts + 32, 32, in_packet)) != ak_error_ok)
+                    return error;
+                break;
+            case client_role:
+                if ((error = ak_esp_context_set_root_key(fctx->esp_ctx, fctx->client_ts, 32, out_packet)) != ak_error_ok)
+                    return error;
+                if ((error = ak_esp_context_set_root_key(fctx->esp_ctx, fctx->server_ts, 32, in_packet)) != ak_error_ok)
+                    return error;
+                if ((error = ak_esp_context_set_salt(fctx->esp_ctx, fctx->client_ts + 32, 32, out_packet)) != ak_error_ok)
+                    return error;
+                if ((error = ak_esp_context_set_salt(fctx->esp_ctx, fctx->server_ts + 32, 32, in_packet)) != ak_error_ok)
+                    return error;
+        }
+
+ return ak_error_ok;
 }
 
 /* ----------------------------------------------------------------------------------------------- */

@@ -33,30 +33,35 @@ int main(int argc, char *argv[]) {
         printf("Ошибка создания контекста защищенного взаимодействия\n");
         return ak_libakrypt_destroy();
     }
+
     /* Устанавливаем роль (сервер, в данном случае): */
     if (ak_fiot_context_set_role(&fiotContext, server_role) != ak_error_ok) {
         printf("Ошибка установки роли пользователя\n");
         ak_fiot_context_destroy(&fiotContext);
         return ak_libakrypt_destroy();
     }
+
     /* Устанавливаем идентификатор сервера: */
     if (ak_fiot_context_set_user_identifier(&fiotContext, server_role, "Lazy server", 11) != ak_error_ok) {
         printf("Ошибка установки идентификатора сервера\n");
         ak_fiot_context_destroy(&fiotContext);
         return ak_libakrypt_destroy();
     }
-    /* Устанавливаем набор криптографических алгоритмов для обмена зашифрованной инфомарцией: */
-    if (ak_fiot_context_set_server_policy(&fiotContext, magmaCTRplusGOST3413) != ak_error_ok) {
-        printf("Ошибка установки политики сервера\n");
-        ak_fiot_context_destroy(&fiotContext);
-        return ak_libakrypt_destroy();
-    }
+
     /* Устанавливаем нужный транспортный (по OSI) протокол: */
     if (ak_fiot_context_set_osi_transport_protocol(&fiotContext, UDP) != ak_error_ok) {
-        printf("Ошибка установки протокола UDP как транспортного протокола sp fiot\n");
+        printf("Ошибка установки протокола UDP как транспортного протокола (по OSI) sp fiot\n");
         ak_fiot_context_destroy(&fiotContext);
         return ak_libakrypt_destroy();
     }
+
+    /* Устанавливаем для передачи прикладных данных протокол ESP: */
+    if (ak_fiot_context_set_esp_transport_protocol(&fiotContext, kuznechikESPAEAD) != ak_error_ok) {
+        printf("Ошибка установки протокола ESP как транспортного протокола sp fiot\n");
+        ak_fiot_context_destroy(&fiotContext);
+        return ak_libakrypt_destroy();
+    }
+
     /* Выполнение протокола выработки ключей: */
     printf("Ожидание подключения клиента...\n");
     if (ak_fiot_context_keys_generation_protocol(&fiotContext, argv[1], serverPort) != ak_error_ok) {
@@ -70,21 +75,27 @@ int main(int argc, char *argv[]) {
 
     ak_uint8 *received;
     size_t receivedLength;
-    message_t messageType = undefined_message;
     bool_t done = ak_false;
     int error;
     do {
         /* Ожидаем сообщение от клиента: */
-        printf("Ожидание сообщение от клиента... \n");
-        if ((received = ak_fiot_context_read_frame(&fiotContext, &receivedLength, &messageType)) == NULL) {
-            ak_error_message(ak_error_get_value(), __func__, "Ошибка получения сообщения от клиента");
+        printf("Ожидание сообщения от клиента... \n");
+        if ((received = ak_fiot_context_read_application_data(&fiotContext, &receivedLength)) == NULL) {
+            /* Если сообщение не поступило, то сбрасываем ошибку и ждем дальше: */
+            if (ak_error_get_value() == ak_error_read_data_timeout)
+                ak_error_set_value(ak_error_ok);
+            else
+                /* Иначе выводим сообщение об ошибке: */
+                ak_error_message(ak_error_get_value(), __func__, "Ошибка получения сообщения от клиента");
             continue;
         } else {
             printf("Сообщение \"%s\" длиной %zu байт(а) получено от клиента\n", received, receivedLength);
             /* Отправляем сообщение обратно: */
-            if ((error = ak_fiot_context_write_application_data(&fiotContext, received, receivedLength)) != ak_error_ok)
+            if ((error = ak_fiot_context_write_application_data(&fiotContext, received, receivedLength)) != ak_error_ok) {
                 ak_error_message(error, __func__, "Ошибка отправки сообщения обратно клиенту");
-            else
+                /* Сбрасываем ошибку: */
+                ak_error_set_value(ak_error_ok);
+            } else
                 printf("Сообщение длиной %zu байт(а) отправлено обратно клиенту\n", receivedLength);
         }
 

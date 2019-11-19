@@ -164,11 +164,13 @@ endif()
 if( LIBAKRYPT_FIOT )
   set( HEADERS      ${HEADERS}
                     source/ak_fiot.h
+                    source/ak_esp.h
   )
   set( SOURCES      ${SOURCES}
                     source/ak_fiot.c
                     source/ak_fiot_tlp.c
                     source/ak_fiot_kgp.c
+                    source/ak_esp.c
   )
   add_compile_options( -DLIBAKRYPT_FIOT=ON )
 endif()

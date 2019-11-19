@@ -790,5 +790,98 @@
 }
 
 /* ----------------------------------------------------------------------------------------------- */
+/*! \brief Вычисление значения функции KDF256(Kin, label, seed) диверсификации секретного ключа
+ * из документа Р 50.1.113–2016.
+ *
+ * @param keyIn Указатель на область памяти, содержащей значение входного ключа
+ * @param keySize Размер входного ключа в байтах
+ * @param label Указатель на область памяти, содержащей значение метки диверсификации
+ * @param labelSize Размер метки диверсификации в байтах
+ * @param seed Указатель на область памяти, содержащей значение "начального значения" (seed)
+ * диверсификации
+ * @param seedSize Размер seed в байтах
+ * @param out Указатель на область памяти (размера не меньше 32-х байт),
+ * в которую помещается значение функции KDF256. Может быть равен NULL.
+ * @return Если out равен NULL, то функция возвращает указатель на буфер (ak_buffer)
+ * со значением функции KDF256. Буфер должен быть очищен с помощью ak_buffer_delete().
+ * Иначе возвращается NULL. В случае неудачи возвращается NULL,
+ * а код ошибки проверяется с помощью ak_error_get_value()
+ */
+ak_buffer ak_hmac_context_kdf256(const ak_pointer keyIn, const size_t keySize,
+                                 const ak_pointer label, const size_t labelSize,
+                                 const ak_pointer seed, const size_t seedSize, ak_pointer out) {
+    struct hmac HMAC256;
+    ak_buffer res;
+    if ((ak_hmac_context_create_streebog256(&HMAC256)) != ak_error_ok) {
+        ak_error_message(ak_error_get_value(), __func__, "wrong hmac256 creation");
+        return NULL;
+    }
+    /* Формируем входные данные для HMAC256 согласно определению KDF256: */
+    const size_t inDataSize = labelSize + seedSize + 4;
+    ak_uint8 *inData = malloc(inDataSize);
+    inData[0] = 0x01;
+    memcpy(inData + 1, label, labelSize);
+    inData[labelSize + 1] = 0x00;
+    memcpy(inData + labelSize + 2, seed, seedSize);
+    inData[labelSize + seedSize + 2] = 0x01;
+    inData[labelSize + seedSize + 3] = 0x00;
+
+    if (ak_hmac_context_set_key(&HMAC256, keyIn, keySize, ak_true) != ak_error_ok) {
+        ak_error_message(ak_error_get_value(), __func__, "error of setting hmac key");
+        return NULL;
+    }
+
+    /* Вычисляем значение, очищаем контекст и возвращаем результат: */
+    res = ak_hmac_context_ptr(&HMAC256, inData, inDataSize, out);
+    if (ak_hmac_context_destroy(&HMAC256) != ak_error_ok) {
+        ak_error_message(ak_error_get_value(), __func__, "wrong hmac256 context destroy");
+        return NULL;
+    }
+    return res;
+}
+
+/* ----------------------------------------------------------------------------------------------- */
+/*! \brief Тестирование функции KDF256 согласно документу Р 50.1.113–2016
+ *
+ * @return Возвращает ak_true в случае успешного тестирования KDF256 и ak_false - иначе
+ */
+bool_t ak_hmac_test_kdf256 ( void ) {
+    /* ТЕСТ KDF256:
+     * Ключ диверсификации Kin (из стандарта):
+     * 00 01 02 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 0f
+     * 10 11 12 13 14 15 16 17 18 19 1a 1b 1c 1d 1e 1f
+     * Запись ключа, как есть: */
+    ak_uint8 Kin[32] = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+                        0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f};
+
+    /* label (из стандарта):
+     * 26 bd b8 78
+     * Запись label, как есть: */
+    ak_uint8 label[4] = {0x26, 0xbd, 0xb8, 0x78};
+
+    /* seed (из стандарта):
+     * af 21 43 41 45 65 63 78
+     * Запись seed, как есть: */
+    ak_uint8 seed[8] = {0xaf, 0x21, 0x43, 0x41, 0x45, 0x65, 0x63, 0x78};
+
+    /* KDF256(Kin, label, seed) (из стандарта):
+     * a1 aa 5f 7d e4 02 d7 b3 d3 23 f2 99 1c 8d 45 34
+     * 01 31 37 01 0a 83 75 4f d0 af 6d 7c d4 92 2e d9
+     * Запись результата, как есть: */
+    ak_uint8 GOSTResPtr[32] = {0xa1, 0xaa, 0x5f, 0x7d, 0xe4, 0x02, 0xd7, 0xb3, 0xd3, 0x23, 0xf2, 0x99, 0x1c, 0x8d, 0x45,
+                               0x34,
+                               0x01, 0x31, 0x37, 0x01, 0x0a, 0x83, 0x75, 0x4f, 0xd0, 0xaf, 0x6d, 0x7c, 0xd4, 0x92, 0x2e,
+                               0xd9};
+    ak_buffer KDFOut;
+    if ((KDFOut = ak_hmac_context_kdf256(Kin, 32, label, 4, seed, 8, NULL)) == NULL) {
+        ak_error_message(ak_error_get_value(), "KDF256", "wrong kdf256 computation");
+        return ak_false;
+    }
+    bool_t res = ak_ptr_is_equal(GOSTResPtr, ak_buffer_get_ptr(KDFOut), ak_buffer_get_size(KDFOut));
+    ak_buffer_delete(KDFOut);
+    return res;
+}
+
+/* ----------------------------------------------------------------------------------------------- */
 /*                                                                                       ak_hmac.с */
 /* ----------------------------------------------------------------------------------------------- */
