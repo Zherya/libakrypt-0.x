@@ -324,6 +324,9 @@ int ak_fiot_context_connect_udp_socket(ak_fiot fctx, char *serverIP, unsigned sh
   /* устанавливаем таймаут ожидания входящих пакетов (в секундах) */
    fctx->timeout = 3;
 
+   /* устанавливаем политику построения заполнения по-умолчанию: */
+   fctx->padding_policy = default_padding;
+
   /* остальные поля: идентификаторы и ключи устанавливаются в ходе выполнения протокола */
  return ak_error_ok;
 }
@@ -618,6 +621,54 @@ int ak_fiot_context_set_esp_transport_protocol(ak_fiot fctx, crypto_mechanism_t 
         return ak_error_message(error, __func__, "wrong random ESP SPI generation");
     if ((error = ak_esp_context_set_spi(fctx->esp_ctx, SPI)) != ak_error_ok)
         return ak_error_message(error, __func__, "wrong ESP SPI setting");
+
+    return ak_error_ok;
+}
+
+/* ----------------------------------------------------------------------------------------------- */
+/*! \brief Получение текущей политики формирования заполнения фреймов.
+ *
+ * @param fctx Указатель на контекст протокола fiot
+ *
+ * @return В случае успеха возвращается политика заполнения, в случае ошибки -
+ * undefined_padding, а код ошибки может быть получен с помощью ak_error_get_value() */
+padding_t ak_fiot_context_get_padding_policy( ak_fiot fctx ) {
+    if ( fctx == NULL ) {
+        ak_error_message( ak_error_null_pointer, __func__, "using null pointer to fiot context" );
+        return undefined_padding;
+    }
+
+    return fctx->padding_policy;
+}
+
+/* ----------------------------------------------------------------------------------------------- */
+/*! \brief Установка политики формирования заполнения фреймов.
+ *
+ * @param fctx Указатель на контекст протокола fiot
+ * @param policy Устанавливаемая политика формирования заполнения.
+ *
+ * @return В случае успеха возвращается ak_error_ok, иначе - код ошибки.
+ */
+int ak_fiot_context_set_padding_policy( ak_fiot fctx, padding_t policy ) {
+    if ( fctx == NULL )
+        return ak_error_message( ak_error_null_pointer, __func__, "using null pointer to fiot context" );
+    if ( policy == undefined_padding )
+        return ak_error_message( ak_error_undefined_value, __func__, "using undefined padding policy" );
+    if ( fctx->esp_ctx != NULL && policy == random_padding )
+        return ak_error_message( ak_error_invalid_value, __func__, "using wrong padding policy with ESP" );
+
+    if (fctx->esp_ctx != NULL) {
+        if (policy == default_padding) {
+            /* Если устанавливается политика по-умолчанию, то отключаем TFC в ESP: */
+            if (ak_esp_context_set_tfc_length(fctx->esp_ctx, 0) != ak_error_ok)
+                return ak_error_message(ak_error_get_value(), __func__, "wrong turning off TFC in ESP");
+        } else
+            /* Иначе устанавливаем выравнивание длины передаваемых данных в зависимости от
+             * размера исходящего буфера: */
+            if (ak_esp_context_set_tfc_length(fctx->esp_ctx, fctx->oframe.size - 128) != ak_error_ok)
+                return ak_error_message(ak_error_get_value(), __func__, "wrong setting TFC in ESP");
+    }
+    fctx->padding_policy = policy;
 
     return ak_error_ok;
 }

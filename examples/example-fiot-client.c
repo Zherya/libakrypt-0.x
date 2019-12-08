@@ -90,6 +90,13 @@ int main(int argc, char *argv[]) {
         return ak_libakrypt_destroy();
     }
 
+    /* Устанавливаем выравнивание пакетов по максимальной длине: */
+    if (ak_fiot_context_set_padding_policy(&fiotContext, max_padding) != ak_error_ok) {
+        printf("Ошибка установки политики использования максимального заполнения\n");
+        ak_fiot_context_destroy(&fiotContext);
+        return ak_libakrypt_destroy();
+    }
+
     /* Выполнение протокола выработки ключей: */
     if (ak_fiot_context_keys_generation_protocol(&fiotContext, argv[1], serverPort) != ak_error_ok) {
         printf("Ошибка выполнения протокола выработки ключей\n");
@@ -106,6 +113,7 @@ int main(int argc, char *argv[]) {
     bool_t done = ak_false;
     int error;
     do {
+        printf("/* --------------------------------------------------------------------------- */\n");
         memset(sent, 0, sizeof(sent));
         printf("Введите сообщение для отправки серверу (или \"done\" для завершения работы)\n");
         printf("Сообщение: ");
@@ -139,6 +147,7 @@ int main(int argc, char *argv[]) {
         /* Если пользователь ввел "done", то завершаем работу: */
         if (strncmp(sent, "done", 4) == 0)
             done = ak_true;
+        printf("/* --------------------------------------------------------------------------- */\n");
     } while (!done);
 
     ak_fiot_context_destroy(&fiotContext);

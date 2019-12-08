@@ -357,6 +357,8 @@
    int error = ak_error_ok;
    ak_uint8 *oframe = NULL;
    size_t ilen = 0, olen = 0, framelen = 0, offset = 0;
+   /* Используется для генерации дополнения случайной длины: */
+   unsigned short padlen;
 
   /* выполняем минимальные проверки */
    if( fctx->iface_enc == undefined_interface ) return fiot_error_wrong_interface;
@@ -385,14 +387,39 @@
    if( framelen > fctx->oframe.size ) return fiot_error_wrong_send_length;
 
   /* увеличиваем длину фрейма за счет паддинга */
-  /*! \note Сейчас при реализации дополнения фрейма используется политика по-умолчанию,
-     при которой общая длина фрейма должна быть кратной 16 байтам, если этого сделать
-     нельзя, то мы откатываемся назад. Необходимо реализовать все возможные политики в
-     соответствии с методическими рекомендациями. */
-   if( framelen%16 != 0 ) {
-     framelen = ( 1+ ( framelen>>4 )) <<4;
-     if( framelen > fctx->oframe.size ) framelen = olen;
-   }
+  switch (fctx->padding_policy) {
+      case default_padding:
+          /* Политика по-умолчанию, при которой общая
+           * длина фрейма должна быть кратной 16 байтам.
+           * Если этого сделать не получается (превышен размер исходящего буфера),
+           * то откатываемся назад: */
+          if (framelen % 16 != 0) {
+              framelen = (1 + (framelen >> 4)) << 4;
+              if (framelen > fctx->oframe.size) framelen = olen;
+          }
+      break;
+      case max_padding:
+          /* Политика максимального дополнения, при которой общая
+           * длина фрейма дополняется до размера исходящего буфера: */
+          framelen = fctx->oframe.size;
+      break;
+      case random_padding:
+          /* Политика случайной длины заполнения. Если длина фрейма с
+           * таким заполнением превышает максимальный размер фрейма,
+           * то длина фрейма устанавливается равной максимальному размеру. */
+          fctx->plain_rnd.random( &fctx->plain_rnd, &padlen, 2);
+          /* Чтобы длина фрейма не вышла за текущую максимальную
+           * длину исходящего фрейма,  для начала ограничим длину заполнения
+           * заданной длиной фрейма: */
+          padlen &= fctx->oframe.size;
+          /* Теперь проверим, не выходит ли за максимальный размер вся длина фрейма
+           * (если да, то устанавливаем максимальную возможную длину фрейма): */
+          if ((framelen = olen + padlen) > fctx->oframe.size)
+              framelen = fctx->oframe.size;
+      break;
+      case undefined_padding:
+          return ak_error_undefined_value;
+  }
   /* теперь собираем фрейм по кусочкам */
    oframe = fctx->oframe.data;
 

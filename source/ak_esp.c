@@ -59,6 +59,9 @@ int ak_esp_context_create(ak_esp espContext) {
         espContext->seqnum_window.window[i] = ak_false;
     espContext->seqnum_window.size = 32;
     espContext->seqnum_window.right_bound = 0;
+
+    /* Не используем TFC-заполнение: */
+    espContext->tfclen = 0;
     return ak_error_ok;
 }
 
@@ -101,8 +104,30 @@ int ak_esp_context_destroy(ak_esp espContext) {
 }
 
 /* ----------------------------------------------------------------------------------------------- */
+/*! \briefФункция устанавливает или сбрасывает использование TFC-заполнения.
+ *
+ * @param espContext Указатель на контекст протокола ESP
+ * @param tfcFlag Устанавливаемое значение длины,
+ * до которой выравниваются (значение от 256 до 65535)
+ * полезные данные с помощью TFC-заполнения
+ *
+ * @return В случае успеха возвращается ak_error_ok, иначе - код ошибки
+ */
+int ak_esp_context_set_tfc_length(ak_esp espContext, size_t tfclen) {
+    if (espContext == NULL)
+        return ak_error_message(ak_error_null_pointer, __func__, "using null pointer to ESP context");
+    if (tfclen != 0 && tfclen < 256)
+        return ak_error_message(ak_error_invalid_value, __func__, "potentialy short TFC length value");
+    if (tfclen > 65535)
+        return ak_error_message(ak_error_invalid_value, __func__, "too large TFC length value");
+
+    espContext->tfclen = tfclen;
+    return ak_error_ok;
+}
+
+/* ----------------------------------------------------------------------------------------------- */
 /*! \brief Функция устанавливает новый трансформ контекста ESP, при этом обнуляются все параметры
- * и данные (если имеются) контекста, в том числе и ключи шифрования и секретная соль.
+ * и данные (если имеются) контекста, в том числе и ключи шифрования, и секретная соль.
  *
  * @param espContext Указатель на контекст протокола ESP
  * @param transform Идентификатор устанавливаемого трансформа
@@ -632,14 +657,14 @@ static void ak_esp_context_read_iv(ak_esp espContext, ak_uint8 *inpacket) {
  *
  * @return В случае успеха возвращается размер ESP-пакета в байтах, иначе - 0
  */
-size_t ak_esp_context_write_packet(ak_esp espContext, ak_pointer data, const size_t datalen,
+size_t ak_esp_context_write_packet(ak_esp espContext, ak_pointer data, size_t datalen,
                                    ak_uint8 protoID, ak_uint8 *opacket) {
     if (espContext == NULL) {
         ak_error_message(ak_error_null_pointer, __func__, "using null pointer to ESP context");
         return 0;
     }
-    if (datalen < 1) {
-        ak_error_message(ak_error_zero_length, __func__, "sending zero length data");
+    if (datalen < 1 || datalen > 65535) {
+        ak_error_message(ak_error_zero_length, __func__, "sending wrong length data");
         return 0;
     }
     if (data == NULL) {
@@ -666,8 +691,31 @@ size_t ak_esp_context_write_packet(ak_esp espContext, ak_pointer data, const siz
     curPacketOffset += 8;
 
     /* 3. Копируем полезные данные: */
-    memcpy(curPacketOffset, data, datalen);
-    curPacketOffset += datalen;
+    /* 3.A Случай использования TFC-заполнения. */
+    if (espContext->tfclen != 0) {
+        /* Сначала записываем длину истинных полезных данных (2 байта),
+        * затем сами данные, а потом - заполнение: */
+        if (datalen + 2 > espContext->tfclen) {
+            ak_error_message(ak_error_invalid_value, __func__, "data is too large for current TFC value");
+            return 0;
+        }
+        /* Длина полезных данных в сетевом порядке байт: */
+        *(curPacketOffset++) = (datalen >> 8) % 256;
+        *(curPacketOffset++) = datalen % 256;
+        /* Сами данные: */
+        memcpy(curPacketOffset, data, datalen);
+        curPacketOffset += datalen;
+        /* TFC-заполнение: */
+        memset(curPacketOffset, 255, espContext->tfclen - datalen - 2);
+        curPacketOffset += espContext->tfclen - datalen - 2;
+        /* Устанавливаем новую длину полезных данных: */
+        datalen = espContext->tfclen;
+    } else {
+        /* 3.B Случай без TFC-заполнения: */
+        /* Копируем полезные данные: */
+        memcpy(curPacketOffset, data, datalen);
+        curPacketOffset += datalen;
+    }
 
     /* 4. Записываем ESP Trailer с обязательным заполнением: */
     trailerLen = ak_esp_context_write_trailer(datalen, protoID, curPacketOffset);
@@ -785,7 +833,7 @@ size_t ak_esp_context_read_packet(ak_esp espContext, ak_uint8 *inpacket, size_t 
     }
     ak_uint8 *curPacketOffset = inpacket;
     ak_uint8 ICVLen;
-    size_t trailerLen, AADLen;
+    size_t AADLen, datalen;
     ak_uint32 seqNum;
     bool_t check = ak_false;
 
@@ -828,7 +876,10 @@ size_t ak_esp_context_read_packet(ak_esp espContext, ak_uint8 *inpacket, size_t 
         // Для Магмы - 64 бита (8 байт):
         ICVLen = 8;
 
-    /* 6. Определяем размер дополнительных аутентифицируемых данных (AAD): */
+    /* 6. Определяем длину данных для расшифрования: */
+    datalen = packetLen - 16 /* Заголовок и IV */ - ICVLen;
+
+    /* 7. Определяем размер дополнительных аутентифицируемых данных (AAD): */
     if (espContext->transform == encr_kuznyechik_mgm_ktree ||
         espContext->transform == encr_magma_mgm_ktree)
         /* Если производится шифрование, то AAD - это ESP Header: */
@@ -837,7 +888,7 @@ size_t ak_esp_context_read_packet(ak_esp espContext, ak_uint8 *inpacket, size_t 
         /* Иначе, AAD - это весь пакет (без ICV, очевидно): */
         AADLen = packetLen - ICVLen;
 
-    /* 7. Устанавливаем ключ шифрования сообщения: */
+    /* 8. Устанавливаем ключ шифрования сообщения: */
     if (ak_bckey_context_set_key(&espContext->msg_key, msgKey->data, msgKey->size, ak_true) != ak_error_ok) {
         ak_error_message(ak_error_get_value(), __func__, "Error of setting block cipher key");
         ak_buffer_delete(msgKey);
@@ -846,7 +897,9 @@ size_t ak_esp_context_read_packet(ak_esp espContext, ak_uint8 *inpacket, size_t 
     }
     ak_buffer_delete(msgKey);
 
-    /* 8. Расшифровываем и/или вычисляем имитовставку от пакета: */
+    /* 9. Расшифровываем и/или вычисляем имитовставку от пакета.
+     * Заметим, что расшифрованные данные (если шифрование имеет место быть)
+     * на данном этапе при расшифровании помещаются на место шифртекста: */
     if (espContext->transform == encr_kuznyechik_mgm_ktree ||
         espContext->transform == encr_magma_mgm_ktree)
         check = ak_bckey_context_decrypt_mgm(&espContext->msg_key, // Ключ для расшифрования (для режимов без шифрования - NULL)
@@ -854,15 +907,15 @@ size_t ak_esp_context_read_packet(ak_esp espContext, ak_uint8 *inpacket, size_t 
                                                          inpacket, // Указатель на начало AAD
                                                            AADLen, // Размер AAD
                                                   curPacketOffset, // Начало шифртекста (для режимов без шифрования - NULL)
-                                                          outdata, // Куда сохранять открытый текст (для режимов без шифрования - NULL)
-                     packetLen - 16 /* Заголовок и IV */ - ICVLen, // Размер шифртекста (для режимов без шифрования - 0)
+                                                  curPacketOffset, // Куда сохранять открытый текст (для режимов без шифрования - NULL)
+                                                          datalen, // Размер шифртекста (для режимов без шифрования - 0)
                                                       nonce->data, // Указатель на начало одноразового вектора
                                                       nonce->size, // Размер одноразового вектора
                                     inpacket + packetLen - ICVLen, // Указатель на ICV, с которым сравнивается вычисленная ICV
                                                           ICVLen); // Ожидаемая длина ICV. Для Кузнечика она меньше длины блока,
                                                                    // и усекаются младшие (правые) биты,
                                                                    // что и требуется стандартом ESP
-    else {
+    else
         check = ak_bckey_context_decrypt_mgm(NULL, // Ключ для расшифрования (для режимов без шифрования - NULL)
                              &espContext->msg_key, // Ключ для вычисления имитовставки
                                          inpacket, // Указатель на начало AAD
@@ -876,25 +929,37 @@ size_t ak_esp_context_read_packet(ak_esp espContext, ak_uint8 *inpacket, size_t 
                                           ICVLen); // Ожидаемая длина ICV. Для Кузнечика она меньше длины блока,
                                                    // и усекаются младшие (правые) биты,
                                                    // что и требуется стандартом ESP
-        /* В случае режима без шифрования, открытый текст так и остался в исходном пакете,
-         * скопируем его в выходной буфер: */
-        memcpy(outdata, curPacketOffset, packetLen - 16 /* Заголовок и IV */ - ICVLen);
-    }
     ak_buffer_delete(nonce);
 
-    /* 9. Проверяем успешность расшифрования: */
+    /* 10. Проверяем успешность расшифрования: */
     if (check == ak_false) {
         ak_error_message(ak_error_get_value(), __func__, "wrong integrity code value");
         return 0;
     }
 
-    /* 10. Вычисляем длину ESP Trailer с обязательным заполнением: */
-    /* Поcледний байт открытого текста - это поле Next Header,
-     * а предпоследний байт - поле Pad Length, найдем его: */
-    trailerLen = outdata[(packetLen - 16  - ICVLen) /* длина открытого текста */ - 2] + 2 /* Next Header и Pad Len */;
+    /* 11.A Если используется TFC-заполнение, то отбрасываем его,
+     * а также ESP Trailer с обязательным заполнением: */
+    if (espContext->tfclen != 0) {
+        /* Определяем реальную длину полезных данных: */
+        datalen = 256 * curPacketOffset[0] + curPacketOffset[1];
+        curPacketOffset += 2;
+        /* Копируем полезные данные в выходной буфер: */
+        memcpy(outdata, curPacketOffset, datalen);
+        /* Так из-за использования TFC нам уже известна длина самих полезных данных,
+         * то проверять ESP Trailer нет смысла */
+    } else {
+        /* 11.B Если TFC-заполнение не используется,
+         * то отбрасываем ESP Trailer: */
+        /* Поcледний байт расшифрованных данных - это поле Next Header,
+         * а предпоследний байт - поле Pad Length, найдем его
+         * и вычислим истинную длину полезных данных: */
+        datalen -= curPacketOffset[datalen - 2] + 2 /* Next Header и Pad Len */;
+        /* Копируем полезные данные в выходной буфер: */
+        memcpy(outdata, curPacketOffset, datalen);
+    }
 
-    /* 11. Отбрасываем ESP Trailer, возвращая длину полезных данных: */
-    return (packetLen - 16  - ICVLen) - trailerLen;
+    /* 12. Возвращаем длину полезных данных: */
+    return datalen;
 }
 
 /* ----------------------------------------------------------------------------------------------- */
