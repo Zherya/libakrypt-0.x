@@ -147,7 +147,6 @@ int main(int argc, char *argv[]) {
         /* Если пользователь ввел "done", то завершаем работу: */
         if (strncmp(sent, "done", 4) == 0)
             done = ak_true;
-        printf("/* --------------------------------------------------------------------------- */\n");
     } while (!done);
 
     ak_fiot_context_destroy(&fiotContext);

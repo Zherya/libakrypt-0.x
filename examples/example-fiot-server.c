@@ -110,7 +110,6 @@ int main(int argc, char *argv[]) {
         /* Если было получено сообщение "done", то завершаем работу: */
         if (strncmp((char *)received, "done", 4) == 0)
             done = ak_true;
-        printf("/* --------------------------------------------------------------------------- */\n");
     } while (!done);
 
     ak_fiot_context_destroy(&fiotContext);

@@ -38,43 +38,43 @@
  #define fiot_error_wrong_send_length          (-259)
 
 /*! \brief Неверное значение, определяющее тип принимаемого фрейма. */
- #define fiot_error_frame_type                 (-258)
+ #define fiot_error_frame_type                 (-260)
 /*! \brief Неверное значение, определяющее размер буффера для приема/отправки фреймов. */
- #define fiot_error_frame_size                 (-259)
+ #define fiot_error_frame_size                 (-261)
 /*! \brief Неверное значение уникального номера фрейма. */
- #define fiot_error_frame_number               (-260)
+ #define fiot_error_frame_number               (-262)
 /*! \brief Неверное значение типа буффера для приема/передачи данных. */
- #define fiot_error_frame_buffer_type          (-261)
+ #define fiot_error_frame_buffer_type          (-263)
 /*! \brief Неверный формат фрейма. */
- #define fiot_error_frame_format               (-262)
+ #define fiot_error_frame_format               (-264)
 /*! \brief Неверный тип принятого сообщения. */
- #define fiot_error_message_type               (-262)
+ #define fiot_error_message_type               (-265)
 /*! \brief Неверно установленный криптографический механизм. */
- #define fiot_error_wrong_mechanism            (-263)
+ #define fiot_error_wrong_mechanism            (-266)
 /*! \brief Неверно установленные ограничения для криптографических механизмов. */
- #define fiot_error_wrong_restrictions         (-264)
+ #define fiot_error_wrong_restrictions         (-267)
 /*! \brief Неверно заданный набор параметров эллиптической кривой. */
- #define fiot_error_unknown_paramset           (-265)
+ #define fiot_error_unknown_paramset           (-268)
 /*! \brief Неверное значение типа предварительно распределенного ключа. */
- #define fiot_error_wrong_psk_type             (-266)
+ #define fiot_error_wrong_psk_type             (-269)
 /*! \brief Использование неопределенного/неверного идентификатора предварительно распределенного ключа */
- #define fiot_error_wrong_psk_identifier_using (-267)
+ #define fiot_error_wrong_psk_identifier_using (-270)
 /*! \brief Неверное значение типа используемого генератора случайных чисел. */
- #define fiot_error_wrong_random_generator     (-268)
+ #define fiot_error_wrong_random_generator     (-271)
 /*! \brief Ошибка генерации случайных данных. */
- #define fiot_error_bad_random_data            (-269)
+ #define fiot_error_bad_random_data            (-272)
 /*! \brief Неверно заданный тип алгоритма блочного шифрования */
- #define fiot_error_wrong_cipher_type          (-270)
+ #define fiot_error_wrong_cipher_type          (-273)
 /*! \brief Неверно заданный тип алгоритма вычисления имитовставки */
- #define fiot_error_wrong_integrity_algorithm  (-271)
+ #define fiot_error_wrong_integrity_algorithm  (-274)
 /*! \brief Неверно заданное (неожидаемое в данный момент) значение состояния контекста. */
- #define fiot_error_wrong_state                (-272)
+ #define fiot_error_wrong_state                (-275)
 /*! \brief Неверно заданное значение поля request. */
- #define fiot_error_wrong_request_value        (-273)
+ #define fiot_error_wrong_request_value        (-276)
 /*! \brief Неверно определено значение идентификатора. */
- #define fiot_error_wrong_identifier           (-274)
+ #define fiot_error_wrong_identifier           (-277)
 /*! \brief Ошибка выбора транспортного (по OSI) протокола. */
-#define fiot_error_wrong_osi_transport_protocol (-275)
+#define fiot_error_wrong_osi_transport_protocol (-278)
 
 /* ----------------------------------------------------------------------------------------------- */
 /*! \brief Допустимые роли участников защищенного взаимодействия. */
