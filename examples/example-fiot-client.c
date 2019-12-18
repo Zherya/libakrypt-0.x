@@ -1,8 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <string.h>
-#include <sys/select.h>
 #include <ak_fiot.h>
 
 int main(int argc, char *argv[]) {
