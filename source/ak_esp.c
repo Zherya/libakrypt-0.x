@@ -16,7 +16,7 @@
 #endif
 /* Для функций hton(s)/(l): */
 #ifdef LIBAKRYPT_HAVE_WINDOWS_H
-    #include <winsock2.h>
+    #include <ws2tcpip.h>
 #endif
 
 /* ----------------------------------------------------------------------------------------------- */
