@@ -14,6 +14,10 @@
 #else
     #error Library cannot be compiled without string.h header
 #endif
+/* Для функций hton(s)/(l): */
+#ifdef LIBAKRYPT_HAVE_WINDOWS_H
+    #include <winsock2.h>
+#endif
 
 /* ----------------------------------------------------------------------------------------------- */
 /*! \brief Функция инициализации контекста протокола ESP
