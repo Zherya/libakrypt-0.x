@@ -17,6 +17,8 @@
 /* Для функций hton(s)/(l): */
 #ifdef LIBAKRYPT_HAVE_WINDOWS_H
     #include <ws2tcpip.h>
+#else
+    #include <arpa/inet.h>
 #endif
 
 /* ----------------------------------------------------------------------------------------------- */
