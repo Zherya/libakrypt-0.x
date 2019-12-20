@@ -40,12 +40,12 @@
 
   /* инициализируем библиотеку на стороне сервера
      вывод сообщений аудита производится в стандартный поток ошибок */
-   //if( !ak_libakrypt_create( ak_function_log_stderr )) return ak_libakrypt_destroy();
+   if( !ak_libakrypt_create( ak_function_log_stderr )) return ak_libakrypt_destroy();
   /* устанавливаем максимальный уровень аудита */
-   //ak_log_set_level( fiot_log_maximum );
+   ak_log_set_level( fiot_log_maximum );
 
   /* создаем сокет */
-   /*if(( listenfd = ak_network_socket( AF_INET, SOCK_STREAM, 0 )) == ak_network_undefined_socket )
+   if(( listenfd = ak_network_socket( AF_INET, SOCK_STREAM, 0 )) == ak_network_undefined_socket )
      return ak_error_message_fmt( -1,  __func__,
                                           "wrong creation of listening socket (%s)", strerror(errno));
    memset( &servaddr, 0, sizeof( struct sockaddr_in ));
@@ -56,23 +56,23 @@
    servaddr.sin_port = htons( atoi( argv[2] ));*/
 
   /* разрешаем запускать bind() на используемом адресе */
-   /*ak_network_setsockopt( listenfd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof ( reuse ));
+   ak_network_setsockopt( listenfd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof ( reuse ));
    if( ak_network_bind( listenfd,  &servaddr, sizeof( servaddr )) != ak_error_ok )
      return ak_error_message_fmt( -1, __func__,
                                           "wrong binding of listening socket (%s)", strerror(errno));*/
   /* начинаем процесс прослушивания сокета */
-   /*if( ak_network_listen( listenfd, 5 ) != ak_error_ok )
+   if( ak_network_listen( listenfd, 5 ) != ak_error_ok )
      return ak_error_message_fmt( ak_error_get_value(), __func__,
                                         "wrong listening of incomming socket" );
    printf("echo-server: listening socket is up on %s:%s\n", argv[1], argv[2] );*/
 
   /* принимаем соединения */
-   /*opt = sizeof( cl_addr );
+   opt = sizeof( cl_addr );
    if(( fd = ak_network_accept( listenfd, &cl_addr, &opt )) == -1 )
      return ak_error_message_fmt( -1, __func__, "wrong accepting connection (%s)", strerror(errno));*/
 
   /* определяем координаты клиента */
-   /*len = sizeof( struct sockaddr_in );
+   len = sizeof( struct sockaddr_in );
    if( ak_network_getpeername( fd, (struct sockaddr *)&cl_addr, &len ) != ak_error_ok )
      return ak_error_message_fmt( -1, __func__,
                                            "can't determine client's peer (%s)", strerror( errno ));

@@ -100,7 +100,7 @@ int ak_fiot_context_connect_tcp_socket(ak_fiot fctx, char *serverIP, unsigned sh
     if (fctx == NULL)
         return ak_error_message(ak_error_null_pointer, __func__, "using null pointer to fiot context");
 
-    int error = ak_error_ok;
+    int error = ak_error_ok, reuse = 1;
     /* Для клиента - это дескриптор единственного сокета для отправки/получения пакетов.
      * Для сервера - дескриптор прослушиваемого сокета, через который принимается соединиение: */
     ak_socket socketFD = ak_network_undefined_socket;
@@ -141,6 +141,11 @@ int ak_fiot_context_connect_tcp_socket(ak_fiot fctx, char *serverIP, unsigned sh
             break;
 
         case server_role:
+            /* Разрешаем запускать bind() на используемом адресе: */
+            if ((error = ak_network_setsockopt(socketFD, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse))) != ak_error_ok) {
+                ak_network_close(socketFD);
+                return ak_error_message(error, __func__, "setting reuse address option error");
+            }
             /* Сервер привязывает к сокету свой адрес и ожидает подключения клиента: */
             if ((error = ak_network_bind(socketFD, &serverAddress, sizeof(serverAddress))) != ak_error_ok) {
                 ak_network_close(socketFD);
@@ -185,7 +190,7 @@ int ak_fiot_context_connect_udp_socket(ak_fiot fctx, char *serverIP, unsigned sh
     if (fctx == NULL)
         return ak_error_message(ak_error_null_pointer, __func__, "using null pointer to fiot context");
 
-    int error = ak_error_ok;
+    int error = ak_error_ok, reuse = 1;
     /* Для клиента - это дескриптор единственного сокета для отправки/получения пакетов.
      * Для сервера - дескриптор прослушиваемого сокета, через который принимается соединиение: */
     ak_socket socketFD = ak_network_undefined_socket;
@@ -228,6 +233,11 @@ int ak_fiot_context_connect_udp_socket(ak_fiot fctx, char *serverIP, unsigned sh
             break;
 
         case server_role:
+            /* Разрешаем запускать bind() на используемом адресе: */
+            if ((error = ak_network_setsockopt(socketFD, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse))) != ak_error_ok) {
+                ak_network_close(socketFD);
+                return ak_error_message(error, __func__, "setting reuse address option error");
+            }
             /* Сервер привязывает к сокету свой адрес и ожидает первое сообщение от клиента,
              * чтобы так же сделать connect на полученный адрес клиента: */
             if ((error = ak_network_bind(socketFD, &serverAddress, sizeof(serverAddress))) != ak_error_ok) {
