@@ -53,7 +53,7 @@
    if( ak_network_inet_pton( AF_INET, argv[1], &servaddr.sin_addr.s_addr ) != ak_error_ok )
      return ak_error_message_fmt( -1, __func__, "incorrect assigning server ip %s address (%s)",
                                                                           argv[1], strerror( errno ));
-   servaddr.sin_port = htons( atoi( argv[2] ));*/
+   servaddr.sin_port = htons( atoi( argv[2] ));
 
   /* разрешаем запускать bind() на используемом адресе */
    ak_network_setsockopt( listenfd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof ( reuse ));
@@ -64,12 +64,12 @@
    if( ak_network_listen( listenfd, 5 ) != ak_error_ok )
      return ak_error_message_fmt( ak_error_get_value(), __func__,
                                         "wrong listening of incomming socket" );
-   printf("echo-server: listening socket is up on %s:%s\n", argv[1], argv[2] );*/
+   printf("echo-server: listening socket is up on %s:%s\n", argv[1], argv[2] );
 
   /* принимаем соединения */
    opt = sizeof( cl_addr );
    if(( fd = ak_network_accept( listenfd, &cl_addr, &opt )) == -1 )
-     return ak_error_message_fmt( -1, __func__, "wrong accepting connection (%s)", strerror(errno));*/
+     return ak_error_message_fmt( -1, __func__, "wrong accepting connection (%s)", strerror(errno));
 
   /* определяем координаты клиента */
    len = sizeof( struct sockaddr_in );
@@ -79,7 +79,7 @@
    if( ak_network_inet_ntop( AF_INET, &cl_addr.sin_addr, ip, (socklen_t) sizeof( ip )) == NULL )
      return ak_error_message_fmt( -1, __func__,
                                         "can't determine client's address (%s)", strerror( errno ));
-   printf( "echo-server: accepted client from %s:%u\n", ip, cl_addr.sin_port );*/
+   printf( "echo-server: accepted client from %s:%u\n", ip, cl_addr.sin_port );
 
 
   /* часть вторая: аутентификация клиента и выполнение протокола выработки общих ключей */

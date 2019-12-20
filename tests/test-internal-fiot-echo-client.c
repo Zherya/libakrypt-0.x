@@ -56,7 +56,7 @@
      ak_error_message_fmt( error, __func__, "wrong server connect" );
      return ak_libakrypt_destroy();
    }
-   printf("echo-client: server connected on %s:%s\n", argv[1], argv[2] );*/
+   printf("echo-client: server connected on %s:%s\n", argv[1], argv[2] );
 
 
   /* часть вторая: аутентификация клиента и выполнение протокола выработки общих ключей */
