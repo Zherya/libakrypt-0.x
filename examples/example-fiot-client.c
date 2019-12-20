@@ -143,7 +143,7 @@ int main(int argc, char *argv[]) {
 
     /* Устанавливаем для передачи прикладных данных протокол FIOT или ESP: */
     if (ESP_flag)
-        if (ak_fiot_context_set_esp_transport_protocol(&fiotContext, kuznechikESPAEAD) != ak_error_ok) {
+        if (ak_fiot_context_set_esp_transport_protocol(&fiotContext, magmaESPAEAD) != ak_error_ok) {
             printf("Enabling ESP protocol in FIOT error\n");
             ak_fiot_context_destroy(&fiotContext);
             return ak_libakrypt_destroy();

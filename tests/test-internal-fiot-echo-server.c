@@ -59,7 +59,7 @@
    ak_network_setsockopt( listenfd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof ( reuse ));
    if( ak_network_bind( listenfd,  &servaddr, sizeof( servaddr )) != ak_error_ok )
      return ak_error_message_fmt( -1, __func__,
-                                          "wrong binding of listening socket (%s)", strerror(errno));*/
+                                          "wrong binding of listening socket (%s)", strerror(errno));
   /* начинаем процесс прослушивания сокета */
    if( ak_network_listen( listenfd, 5 ) != ak_error_ok )
      return ak_error_message_fmt( ak_error_get_value(), __func__,
