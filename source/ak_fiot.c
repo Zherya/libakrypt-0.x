@@ -281,13 +281,10 @@ int ak_fiot_context_connect_udp_socket(ak_fiot fctx, char *serverIP, unsigned sh
 
    if( fctx == NULL ) return ak_error_message( ak_error_null_pointer, __func__,
                                                            "using null pointer to fiot context" );
-  /* устанавливаем максимальный размер буффера для хранения передаваемых/получаемых данных.
-   * Для приемного буфера устанавливаем самый максимальный для протокола размер фрейма, чтобы
-   * на время выполнения протокола генерации ключей обеспечить максимальное приемное окно в
-   * случае UDP, во избежание ошибок */
+  /* устанавливаем максимальный размер буффера для хранения передаваемых/получаемых данных. */
    if(( error = ak_buffer_create_size( &fctx->oframe, fiot_frame_size )) != ak_error_ok )
      return ak_error_message( error, __func__, "incorrect creation of output buffer" );
-   if(( error = ak_buffer_create_size( &fctx->inframe, fiot_max_frame_size )) != ak_error_ok ) {
+   if(( error = ak_buffer_create_size( &fctx->inframe, fiot_frame_size )) != ak_error_ok ) {
      ak_buffer_destroy( &fctx->oframe );
      return ak_error_message( error, __func__, "incorrect creation of input buffer" );
    }

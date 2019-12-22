@@ -1277,11 +1277,6 @@
   } while(( fctx->state != wait_client_application_data ) &&
                 ( fctx->state != wait_server_application_data ));
 
- /* Устанавливаем размер примного буфера в размер по умолчанию, так как
-  * размер был увеличен с целью избежания ошибок при протоколе выработки
-  * ключей (на случай использования UDP): */
- ak_buffer_free( &fctx->inframe );
- ak_buffer_set_size( &fctx->inframe, fiot_frame_size );
  /* перед завершением протокола вырабатываем общую ключевую информацию */
     if ((error = ak_fiot_context_create_ats_keys( fctx )) != ak_error_ok)
         return error;
